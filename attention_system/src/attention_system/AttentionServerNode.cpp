@@ -70,7 +70,7 @@ AttentionServerNode::on_configure(const rclcpp_lifecycle::State & state)
   joint_cmd_pub_ = create_publisher<trajectory_msgs::msg::JointTrajectory>(
     "/head_controller/joint_trajectory", 100);
   joint_sub_ = create_subscription<control_msgs::msg::JointTrajectoryControllerState>(
-    "/head_controller/state", rclcpp::SensorDataQoS().reliable(),
+    "/head_controller/controller_state", rclcpp::SensorDataQoS().reliable(),
     std::bind(&AttentionServerNode::joint_state_callback, this, _1));
 
   attention_command_sub_ = create_subscription<attention_system_msgs::msg::AttentionCommand>(
@@ -155,19 +155,21 @@ void
 AttentionServerNode::joint_state_callback(
   control_msgs::msg::JointTrajectoryControllerState::UniquePtr msg)
 {
-  current_yaw_ = msg->actual.positions[0];
-  current_pitch_ = msg->actual.positions[1];
+  current_yaw_ = msg->reference.positions[0];
+  current_pitch_ = msg->reference.positions[1];
 }
 
 trajectory_msgs::msg::JointTrajectory
 AttentionServerNode::get_command_to_angles(
   double yaw, double pitch, const rclcpp::Duration time2pos)
 {
-  double limit_yaw = max_vel_yaw_ * time2pos.seconds();
-  double limit_pitch = max_vel_pitch_ * time2pos.seconds();
+  const double difference_yaw = yaw - current_yaw_;
+  const double difference_pitch = pitch - current_pitch_;
 
-  double delta_yaw = std::clamp(yaw - current_yaw_, -limit_yaw, limit_yaw);
-  double delta_pitch = std::clamp(pitch - current_pitch_, -limit_pitch, limit_pitch);
+  RCLCPP_INFO_ONCE(get_logger(), "Max vel yaw: %f, Max vel pitch: %f", max_vel_yaw_, max_vel_pitch_);
+  double time_yaw = (max_vel_yaw_ > 0.0) ? std::abs(difference_yaw) / max_vel_yaw_ : 0.0;
+  double time_pitch = (max_vel_pitch_ > 0.0) ? std::abs(difference_pitch) / max_vel_pitch_ : 0.0;
+  rclcpp::Duration required_time = rclcpp::Duration::from_seconds(std::max(time_yaw, time_pitch));
 
   trajectory_msgs::msg::JointTrajectory command_msg;
 
@@ -176,11 +178,15 @@ AttentionServerNode::get_command_to_angles(
   command_msg.points[0].positions.resize(2);
   command_msg.points[0].velocities.resize(2);
   command_msg.points[0].accelerations.resize(2);
-  command_msg.points[0].positions[0] =
-    (std::abs(delta_yaw) < rotation_threshold_) ? yaw : (current_yaw_);
-  command_msg.points[0].positions[1] =
-    (std::abs(delta_pitch) < rotation_threshold_) ? pitch : (current_pitch_);
-  command_msg.points[0].time_from_start = rclcpp::Duration::from_seconds(0.00);
+  command_msg.points[0].positions[0] = yaw;
+  // RCLCPP_INFO(get_logger(), "yaw: %f, current_yaw: %f, difference_yaw: %f", yaw, current_yaw_, difference_yaw);
+  // RCLCPP_INFO(get_logger(), "pitch: %f, current_pitch: %f, difference_pitch: %f", pitch, current_pitch_, difference_pitch);
+  // RCLCPP_INFO(get_logger(), "Required time: %f seconds", required_time.seconds());
+    // (std::abs(delta_yaw) < rotation_threshold_) ? current_yaw_ + delta_yaw: (current_yaw_);
+  command_msg.points[0].positions[1] = pitch;
+  // (std::abs(difference_pitch) < rotation_threshold_) ? pitch : (current_pitch_);
+  // RCLCPP_INFO(get_logger(), "Delta pitch: %f", delta_pitch);
+  command_msg.points[0].time_from_start = required_time;
 
   return command_msg;
 }
@@ -188,7 +194,11 @@ AttentionServerNode::get_command_to_angles(
 void
 AttentionServerNode::update()
 {
-  if (attention_frame_ == "") {return;}
+  if (attention_frame_ == "") {
+    return;
+  }
+
+  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 2000, "Following frame: %s", attention_frame_.c_str());
 
   auto [pitch, yaw, success] = get_py_from_frame(attention_frame_);
 

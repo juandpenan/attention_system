@@ -4,6 +4,6 @@ attention_server:
     period: 0.02 # 50 Hz this is the controller speed
     max_yaw: 1.3
     max_pitch: 0.185
-    max_vel_yaw: 1.0
-    max_vel_pitch: 1.0
+    max_vel_yaw: 1.75 
+    max_vel_pitch: 1.75
     rotation_threshold: 0.436332 # 25 degrees
