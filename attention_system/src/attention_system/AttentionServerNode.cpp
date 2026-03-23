@@ -178,14 +178,9 @@ AttentionServerNode::get_command_to_angles(
   command_msg.points[0].positions.resize(2);
   command_msg.points[0].velocities.resize(2);
   command_msg.points[0].accelerations.resize(2);
-  command_msg.points[0].positions[0] = yaw;
-  // RCLCPP_INFO(get_logger(), "yaw: %f, current_yaw: %f, difference_yaw: %f", yaw, current_yaw_, difference_yaw);
-  // RCLCPP_INFO(get_logger(), "pitch: %f, current_pitch: %f, difference_pitch: %f", pitch, current_pitch_, difference_pitch);
-  // RCLCPP_INFO(get_logger(), "Required time: %f seconds", required_time.seconds());
-    // (std::abs(delta_yaw) < rotation_threshold_) ? current_yaw_ + delta_yaw: (current_yaw_);
-  command_msg.points[0].positions[1] = pitch;
-  // (std::abs(difference_pitch) < rotation_threshold_) ? pitch : (current_pitch_);
-  // RCLCPP_INFO(get_logger(), "Delta pitch: %f", delta_pitch);
+  command_msg.points[0].positions[0] = std::clamp(yaw, -max_yaw_, max_yaw_);
+  command_msg.points[0].positions[1] = std::clamp(pitch, -max_pitch_, max_pitch_);
+
   command_msg.points[0].time_from_start = required_time;
 
   return command_msg;
